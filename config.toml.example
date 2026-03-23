@@ -1,0 +1,4 @@
+[source_channels]
+# Use usernames (without @) or IDs (for private channels)
+# channels = ["username1", "username2", -100123456789]
+channels = []
