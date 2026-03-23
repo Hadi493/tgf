@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.session
+*.session-journal
+db/storage.db
+.env
+config.toml

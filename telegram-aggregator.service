@@ -1,0 +1,13 @@
+[Unit]
+Description=Telegram Aggregator Userbot
+After=network.target
+
+[Service]
+Type=simple
+User=cyber-green
+WorkingDirectory=/home/cyber-green/coding/cyber-green/telegram_feed
+ExecStart=/home/cyber-green/coding/cyber-green/telegram_feed/.venv/bin/python main.py run
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

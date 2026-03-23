@@ -1,0 +1,6 @@
+telethon
+python-dotenv
+aiosqlite
+loguru
+click
+tomli-w
