@@ -45,3 +45,11 @@
 2026-03-24 00:09:53.558 | DEBUG    | handlers.message:handle_new_message:25 - Received new message from -1002338414262
 2026-03-24 00:09:53.927 | INFO     | handlers.message:handle_new_message:47 - Forwarding message from Ali Bk
 2026-03-24 00:09:54.060 | SUCCESS  | handlers.message:handle_new_message:64 - Forwarded message from Ali Bk
+2026-03-24 00:14:49.220 | INFO     | __main__:main:83 - Starting Telegram Aggregator...
+2026-03-24 00:14:49.221 | INFO     | db.storage:initialize:22 - Database initialized.
+2026-03-24 00:14:49.798 | INFO     | __main__:main:101 - Authorized as: CyberGreenOfficial (ID: 6061849908, Bot: False)
+2026-03-24 00:14:50.102 | INFO     | handlers.message:register_handlers:17 - Resolved aggregator channel: @lsmoieufijnfbot
+2026-03-24 00:14:50.103 | SUCCESS  | __main__:main:118 - Userbot is running and listening for messages.
+2026-03-24 00:15:41.701 | DEBUG    | handlers.message:handle_new_message:25 - Received new message from -1002295033644
+2026-03-24 00:15:41.708 | INFO     | handlers.message:handle_new_message:47 - Forwarding message from Unlocked Developer's
+2026-03-24 00:15:41.823 | SUCCESS  | handlers.message:handle_new_message:64 - Forwarded message from Unlocked Developer's

@@ -104,13 +104,11 @@ async def main():
         return
     
     # 4. Resolve source channels
-    logger.info("Resolving source channels...")
     resolved_channels = []
     for channel in source_channels:
         try:
             entity = await client.get_entity(channel)
             resolved_channels.append(entity.id)
-            logger.debug(f"Resolved source: {getattr(entity, 'title', 'Unknown')} ({entity.id})")
         except Exception as e:
             logger.error(f"Could not resolve source channel '{channel}': {e}")
     
