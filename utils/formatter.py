@@ -7,7 +7,7 @@ def format_message(message: Message, chat: Chat | Channel) -> str:
     source_title = getattr(chat, 'title', 'Unknown Source')
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    header = f"📢 **{source_title}** | 🕒 {timestamp}\n\n"
+    header = f"**{source_title}** | {timestamp}\n\n"
     original_text = message.text or ""
     
     return f"{header}{original_text}"
