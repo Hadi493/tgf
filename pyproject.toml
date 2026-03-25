@@ -1,7 +1,7 @@
 [project]
 name = "telegram-feed"
 version = "0.1.0"
-description = "Add your description here"
+description = "Telegram feed"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
