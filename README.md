@@ -6,7 +6,7 @@ A Telegram userbot that aggregates messages from multiple channels into a single
 
 ## How it works
 
-tgf logs into your Telegram account using [Telethon](https://github.com/LonamiWebs/Telethon) (MTProto), listens to new messages from your configured source channels, and forwards them to one aggregator channel — giving you a single feed for everything.
+tgf logs into your Telegram account using [Telethon](https://github.com/LonamiWebs/Telethon) (MTProto), listens to new messages from your configured source channels, and forwards them to one aggregator channel/bot — giving you a single feed for everything.
 
 ## Requirements
 
@@ -50,4 +50,3 @@ channels = ["@channel1", "@channel2"]
 - This is a **userbot** — it runs as your personal Telegram account, not a bot token.
 - Keep your `.env` file private and never push it to GitHub.
 - Logs are written to `bot.log` with rotation at 10 MB.
-
