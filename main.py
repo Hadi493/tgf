@@ -3,14 +3,12 @@ import os
 import tomllib
 from dotenv import load_dotenv
 
-# Load config and environment first
 load_dotenv()
 
 from telethon import TelegramClient
 from loguru import logger
 import click
 
-# Add file logging
 logger.add("bot.log", rotation="10 MB", level="DEBUG")
 
 from db.storage import Database
@@ -26,7 +24,6 @@ def save_config(config):
     with open(CONFIG_FILE, "wb") as f:
         tomli_w.dump(config, f)
 
-# Telethon config
 API_ID = os.getenv("TELEGRAM_API_ID")
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 PHONE = os.getenv("TELEGRAM_PHONE")
@@ -38,10 +35,9 @@ db = Database()
 def cli():
     pass
 
-@cli.command()
+@cli.command(help="Add a source channel (username or ID).")
 @click.argument('channel')
 def add(channel):
-    """Add a source channel (username or ID)."""
     config = load_config()
     if channel not in config['source_channels']['channels']:
         config['source_channels']['channels'].append(channel)
@@ -50,10 +46,9 @@ def add(channel):
     else:
         click.echo(f"{channel} is already in the list.")
 
-@cli.command()
+@cli.command(help="Remove a source channel.")
 @click.argument('channel')
 def remove(channel):
-    """Remove a source channel."""
     config = load_config()
     if channel in config['source_channels']['channels']:
         config['source_channels']['channels'].remove(channel)
@@ -62,9 +57,8 @@ def remove(channel):
     else:
         click.echo(f"{channel} not found in the list.")
 
-@cli.command()
+@cli.command(help="List all source channels.")
 def list():
-    """List all source channels."""
     config = load_config()
     channels = config['source_channels']['channels']
     if not channels:
@@ -74,36 +68,32 @@ def list():
         for c in channels:
             click.echo(f"- {c}")
 
-@cli.command()
+@cli.command(help="Start the Telegram aggregator userbot.")
 def run():
-    """Start the Telegram aggregator userbot."""
     asyncio.run(main())
 
-async def main():
-    logger.info("Starting Telegram Aggregator...")
-    
-    # 1. Initialize DB
+async def initialize_database():
     await db.initialize()
-    
-    # 2. Load Config
+
+def load_configuration():
     config = load_config()
     source_channels = config['source_channels']['channels']
-    
     if not source_channels:
         logger.warning("No source channels configured. Add some using 'python main.py add <channel>'.")
+    return source_channels
 
-    # 3. Initialize Client
+async def start_client():
     client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
     await client.start(phone=PHONE)
     
-    # Check session type
     me = await client.get_me()
     logger.info(f"Authorized as: {me.username or me.first_name} (ID: {me.id}, Bot: {me.bot})")
     if me.bot:
         logger.error("Logged in as a BOT. Userbots MUST be a user account. Delete session.session and retry.")
-        return
-    
-    # 4. Resolve source channels
+        return None
+    return client
+
+async def resolve_channels(client, source_channels):
     resolved_channels = []
     for channel in source_channels:
         try:
@@ -111,15 +101,27 @@ async def main():
             resolved_channels.append(entity.id)
         except Exception as e:
             logger.error(f"Could not resolve source channel '{channel}': {e}")
+    return resolved_channels
+
+async def main():
+    logger.info("Starting Telegram Aggregator...")
     
-    # 5. Register Handlers
+    await initialize_database()
+    
+    source_channels = load_configuration()
+    
+    client = await start_client()
+    if not client:
+        return
+    
+    resolved_channels = await resolve_channels(client, source_channels)
+    
     await register_handlers(client, db, resolved_channels)
     
     logger.success("Userbot is running and listening for messages.")
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    # Add tomli_w to requirements if using CLI add/remove
     try:
         import tomli_w
     except ImportError:

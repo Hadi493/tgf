@@ -1,19 +1,12 @@
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
 .venv/
 .env
-
-# Telegram Sessions & Logs
 *.session
 *.session-journal
 bot.log
 diagnose.py
-
-# Data
 db/storage.db
 config.toml
-
-# System
 .DS_Store
