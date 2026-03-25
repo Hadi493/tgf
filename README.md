@@ -47,6 +47,5 @@ channels = ["@channel1", "@channel2"]
 
 ## Notes
 
-- This is a **userbot** — it runs as your personal Telegram account, not a bot token.
 - Keep your `.env` file private and never push it to GitHub.
 - Logs are written to `bot.log` with rotation at 10 MB.
