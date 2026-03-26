@@ -1,51 +1,33 @@
-# tgf — Telegram Feed
+# tgf — My Telegram Feed
 
-A Telegram userbot that aggregates messages from multiple channels into a single target channel in real time.
+I built `tgf` because I was tired of jumping between dozens of Telegram channels to stay updated. This is a simple tool that watches the channels i care about and forwards everything into one single "feed" channel/bot for me.
 
-> ⚠️ **Personal Project** — This is built for personal use. Use it responsibly and at your own risk.
+Think of it as an RSS reader, but for Telegram.
 
-## How it works
+## Quick Start
 
-tgf logs into your Telegram account using [Telethon](https://github.com/LonamiWebs/Telethon) (MTProto), listens to new messages from your configured source channels, and forwards them to one aggregator channel/bot — giving you a single feed for everything.
+   ```bash
+   git clone https://github.com/Hadi493/tgf.git
+   cd tgf
+   ```
 
-## Requirements
+   Copy `.env.example` to `.env` and add your Telegram API details (you get these from [my.telegram.org](https://my.telegram.org)).
 
-- Python 3.11+
-- [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- A Telegram account with `api_id` and `api_hash` from [my.telegram.org](https://my.telegram.org)
+   Copy `config.toml.example` to `config.toml` and list the channels you want to follow.
 
-## Setup
+## How to use it
 
-```bash
-git clone https://github.com/Hadi493/tgf.git
-cd tgf
+If you have [uv](https://github.com/astral-sh/uv) installed (which I recommend), it's super easy:
 
-cp .env.example .env
-# Fill in your TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE
+- **Start the feed**: `uv run main.py run`
+- **Add a channel**: `uv run main.py add channelsusername`
+- **Remove a channel**: `uv run main.py remove channelsusername`
+- **See what's being tracked**: `uv run main.py list`
 
-cp config.toml.example config.toml
-# Add your source channels
-```
+## A few notes
 
-## Usage
+- **Privacy**: Keep your `.env` file to yourself. It contains your login session.
+- **Safety**: This uses your actual Telegram account (as a "userbot"). Don't go overboard with hundreds of channels or you might trigger Telegram's flood limits.
+- **Logs**: If something goes wrong, check `bot.log`. It cleans itself up after 10MB.
 
-```bash
-# Run the userbot
-uv run main.py run
-
-# Manage channels
-uv run main.py add @channelusername
-uv run main.py remove @channelusername
-uv run main.py list
-```
-## Config example
-
-```toml
-[source_channels]
-channels = ["@channel1", "@channel2"]
-```
-
-## Notes
-
-- Keep your `.env` file private and never push it to GitHub.
-- Logs are written to `bot.log` with rotation at 10 MB.
+*This is a personal project I use daily. Feel free to use it, but remember it's provided "as-is"!*
