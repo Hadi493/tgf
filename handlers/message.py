@@ -1,8 +1,10 @@
 from telethon import TelegramClient, events
+from telethon.tl.types import MessageMediaWebPage
 from loguru import logger
 from db.storage import Database
 from utils.formatter import get_content_hash
 import os
+import asyncio
 
 def get_aggregator_channel():
     return os.getenv("TELEGRAM_AGGREGATOR_CHANNEL")
@@ -29,6 +31,83 @@ async def get_message_link(client, chat_id, message_id):
     except:
         return f"https://t.me/c/{str(chat_id).replace('-100', '')}/{message_id}"
 
+async def process_message(client, db, aggregator, chat_id, messages, is_album=False):
+    try:
+        main_msg = messages[0]
+        content_hash = get_content_hash(main_msg)
+        
+        if await db.is_duplicate(content_hash):
+            return
+
+        name = await get_entity_name(client, chat_id)
+        
+        reply_to = None
+        if main_msg.reply_to_msg_id:
+            reply_to = await db.get_mapping(chat_id, main_msg.reply_to_msg_id)
+
+        msg_link = await get_message_link(client, chat_id, main_msg.id)
+        header = f"**{name}** ([Source]({msg_link}))"
+        body = main_msg.text or ""
+        caption = f"{header}\n\n{body}"
+        
+        has_real_media = main_msg.media and not isinstance(main_msg.media, MessageMediaWebPage)
+        
+        if is_album:
+            sent_msgs = await client.send_file(
+                aggregator,
+                messages,
+                caption=caption if len(caption) <= 1024 else caption[:1021] + "...",
+                reply_to=reply_to
+            )
+            sent_msg = sent_msgs[0] if isinstance(sent_msgs, list) else sent_msgs
+            
+            if len(caption) > 1024:
+                await client.send_message(aggregator, caption, reply_to=sent_msg.id, link_preview=False)
+        else:
+            if has_real_media and len(caption) > 1024:
+                sent_msg = await client.send_message(
+                    aggregator,
+                    caption[:1021] + "...",
+                    file=main_msg.media,
+                    reply_to=reply_to,
+                    buttons=main_msg.reply_markup,
+                    link_preview=False
+                )
+                await client.send_message(aggregator, caption, reply_to=sent_msg.id, link_preview=False)
+            else:
+                sent_msg = await client.send_message(
+                    aggregator,
+                    caption,
+                    file=main_msg.media if has_real_media else None,
+                    reply_to=reply_to,
+                    buttons=main_msg.reply_markup,
+                    link_preview=False
+                )
+
+        await db.mark_as_seen(content_hash)
+        await db.save_mapping(chat_id, main_msg.id, sent_msg.id)
+        logger.success(f"Forwarded from {name}")
+
+    except Exception as e:
+        logger.error(f"Error handling message: {e}")
+
+async def catch_up(client: TelegramClient, db: Database, source_channels: list):
+    aggregator_channel = get_aggregator_channel()
+    try:
+        aggregator = await client.get_entity(aggregator_channel)
+        for chat_id in source_channels:
+            last_id = await db.get_last_message_id(chat_id)
+            
+            if last_id == 0:
+                async for msg in client.iter_messages(chat_id, limit=5):
+                    await process_message(client, db, aggregator, chat_id, [msg], is_album=False)
+                continue
+            
+            async for message in client.iter_messages(chat_id, min_id=last_id, reverse=True):
+                await process_message(client, db, aggregator, chat_id, [message], is_album=False)
+    except Exception as e:
+        logger.error(f"Error during catch up: {e}")
+
 async def register_handlers(client: TelegramClient, db: Database, source_channels: list):
     aggregator_channel = get_aggregator_channel()
 
@@ -39,68 +118,45 @@ async def register_handlers(client: TelegramClient, db: Database, source_channel
         logger.error(f"Could not resolve aggregator channel '{aggregator_channel}': {e}")
         return
 
-    async def process_message(event, messages, is_album=False):
-        try:
-            main_msg = messages[0]
-            content_hash = get_content_hash(main_msg)
-            
-            if await db.is_duplicate(content_hash):
-                return
-
-            name = await get_entity_name(client, event.chat_id)
-            
-            reply_to = None
-            if main_msg.reply_to_msg_id:
-                reply_to = await db.get_mapping(event.chat_id, main_msg.reply_to_msg_id)
-
-            msg_link = await get_message_link(client, event.chat_id, main_msg.id)
-            header = f"**{name}** ([Source]({msg_link}))"
-            body = main_msg.text or ""
-            caption = f"{header}\n\n{body}"
-            
-            if is_album:
-                sent_msgs = await client.send_file(
-                    aggregator,
-                    messages,
-                    caption=caption if len(caption) <= 1024 else caption[:1021] + "...",
-                    reply_to=reply_to
-                )
-                sent_msg = sent_msgs[0] if isinstance(sent_msgs, list) else sent_msgs
-                
-                if len(caption) > 1024:
-                    await client.send_message(aggregator, caption, reply_to=sent_msg.id, link_preview=False)
-            else:
-                if main_msg.media and len(caption) > 1024:
-                    sent_msg = await client.send_message(
-                        aggregator,
-                        caption[:1021] + "...",
-                        file=main_msg.media,
-                        reply_to=reply_to,
-                        buttons=main_msg.reply_markup,
-                        link_preview=False
-                    )
-                    await client.send_message(aggregator, caption, reply_to=sent_msg.id, link_preview=False)
-                else:
-                    sent_msg = await client.send_message(
-                        aggregator,
-                        caption,
-                        file=main_msg.media,
-                        reply_to=reply_to,
-                        buttons=main_msg.reply_markup,
-                        link_preview=False
-                    )
-
-            await db.mark_as_seen(content_hash)
-            await db.save_mapping(event.chat_id, main_msg.id, sent_msg.id)
-            logger.success(f"Forwarded from {name}")
-
-        except Exception as e:
-            logger.error(f"Error handling message: {e}")
-
     @client.on(events.Album(chats=source_channels))
     async def handle_album(event):
-        await process_message(event, event.messages, is_album=True)
+        await process_message(client, db, aggregator, event.chat_id, event.messages, is_album=True)
 
     @client.on(events.NewMessage(chats=source_channels, func=lambda e: e.grouped_id is None))
     async def handle_new_message(event):
-        await process_message(event, [event.message], is_album=False)
+        await process_message(client, db, aggregator, event.chat_id, [event.message], is_album=False)
+
+    @client.on(events.MessageEdited(chats=source_channels))
+    async def handle_edit(event):
+        try:
+            aggregator_msg_id = await db.get_mapping(event.chat_id, event.id)
+            if not aggregator_msg_id:
+                return
+
+            name = await get_entity_name(client, event.chat_id)
+            msg_link = await get_message_link(client, event.chat_id, event.id)
+            header = f"**{name}** ([Source]({msg_link}))"
+            body = event.text or ""
+            caption = f"{header}\n\n{body}"
+
+            await client.edit_message(
+                aggregator,
+                aggregator_msg_id,
+                caption if event.media else caption,
+                file=event.media if event.media else None,
+                link_preview=False
+            )
+            logger.info(f"Updated edited message from {name}")
+        except Exception as e:
+            logger.error(f"Error handling edit: {e}")
+
+    @client.on(events.MessageDeleted())
+    async def handle_delete(event):
+        for msg_id in event.deleted_ids:
+            try:
+                aggregator_msg_id = await db.get_mapping(event.chat_id, msg_id)
+                if aggregator_msg_id:
+                    await client.delete_messages(aggregator, aggregator_msg_id)
+                    logger.info(f"Deleted message {msg_id} from aggregator")
+            except Exception as e:
+                logger.error(f"Error handling delete: {e}")

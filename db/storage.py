@@ -25,6 +25,7 @@ class Database:
                     PRIMARY KEY (source_chat_id, source_msg_id)
                 )
             """)
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_mappings_source ON message_mappings (source_chat_id, source_msg_id)")
             await db.commit()
             logger.info("Database initialized.")
 
@@ -58,3 +59,11 @@ class Database:
             ) as cursor:
                 row = await cursor.fetchone()
                 return row[0] if row else None
+
+    async def get_last_message_id(self, source_chat_id: int) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT MAX(source_msg_id) FROM message_mappings WHERE source_chat_id = ?", (source_chat_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row and row[0] else 0

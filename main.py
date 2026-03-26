@@ -12,7 +12,7 @@ import click
 logger.add("bot.log", rotation="10 MB", level="DEBUG")
 
 from db.storage import Database
-from handlers.message import register_handlers
+from handlers.message import register_handlers, catch_up
 CONFIG_FILE = "config.toml"
 
 def load_config():
@@ -115,6 +115,8 @@ async def main():
         return
     
     resolved_channels = await resolve_channels(client, source_channels)
+    
+    await catch_up(client, db, resolved_channels)
     
     await register_handlers(client, db, resolved_channels)
     
