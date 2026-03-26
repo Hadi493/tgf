@@ -1,3 +1,5 @@
+[source]
+folder = []
+
 [source_channels]
-# channels = ["username1", "username2", -100123456789]
 channels = []
