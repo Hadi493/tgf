@@ -14,5 +14,6 @@ def format_message(message: Message, chat: Chat | Channel) -> str:
 def get_content_hash(message: Message) -> str:
     text = message.text or ""
     media_info = str(message.media) if message.media else ""
-    raw_data = f"{text}{media_info}"
+    reply_info = str(message.reply_to_msg_id) if message.reply_to_msg_id else ""
+    raw_data = f"{text}{media_info}{reply_info}"
     return hashlib.sha256(raw_data.encode()).hexdigest()
