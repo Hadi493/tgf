@@ -24,19 +24,24 @@ async def register_handlers(client: TelegramClient, db: Database, source_channel
             if await db.is_duplicate(content_hash):
                 return
 
+            chat = await event.get_chat()
+            name = getattr(chat, 'title', 'Unknown')
+            
             reply_to = None
-            if event.message.reply_to:
-                reply_to = await db.get_mapping(event.chat_id, event.message.reply_to.reply_to_msg_id)
+            if event.reply_to_msg_id:
+                reply_to = await db.get_mapping(event.chat_id, event.reply_to_msg_id)
 
             sent_msg = await client.send_message(
                 aggregator,
-                event.message,
-                reply_to=reply_to
+                f"**{name}**\n\n{event.message.text or ''}",
+                file=event.message.media,
+                reply_to=reply_to,
+                buttons=event.message.reply_markup
             )
 
             await db.mark_as_seen(content_hash)
             await db.save_mapping(event.chat_id, event.message.id, sent_msg.id)
-            logger.success(f"Forwarded message ID {event.message.id} to {sent_msg.id}")
+            logger.success(f"Forwarded from {name}")
 
         except Exception as e:
             logger.error(f"Error handling message: {e}")
