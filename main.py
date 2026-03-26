@@ -2,164 +2,175 @@ import asyncio
 import os
 import sys
 import tomllib
+import tomli_w
+import click
 from dotenv import load_dotenv
-
-load_dotenv()
-
 from telethon import TelegramClient
 from loguru import logger
-import click
-
-logger.add("bot.log", rotation="10 MB", level="DEBUG")
-
 from db.storage import Database
 from handlers.message import register_handlers, catch_up
 from utils.folder import get_channels_from_folder
 
+load_dotenv()
+
 CONFIG_FILE = "config.toml"
 SESSION_NAME = "session"
+API_ID = os.getenv("TELEGRAM_API_ID")
+API_HASH = os.getenv("TELEGRAM_API_HASH")
+PHONE = os.getenv("TELEGRAM_PHONE")
 
-API_ID = os.getenv("TELEGRAM_API_ID") or sys.exit("Missing TELEGRAM_API_ID in .env")
-API_HASH = os.getenv("TELEGRAM_API_HASH") or sys.exit("Missing TELEGRAM_API_HASH in .env")
-PHONE = os.getenv("TELEGRAM_PHONE") or sys.exit("Missing TELEGRAM_PHONE in .env")
+if not all([API_ID, API_HASH, PHONE]):
+    logger.error("Missing environment variables in .env")
+    sys.exit(1)
 
 db = Database()
 
 def load_config() -> dict:
+    if not os.path.exists(CONFIG_FILE):
+        return {"source": {"folder": []}, "source_channels": {"channels": []}}
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
-def save_config(config: dict) -> None:
-    import tomli_w
+def save_config(config: dict):
     with open(CONFIG_FILE, "wb") as f:
         tomli_w.dump(config, f)
-
 
 @click.group()
 def cli():
     pass
 
-@cli.command(help="Add a source channel (username or ID).")
-@click.argument("channel")
-def add(channel: str) -> None:
+@cli.group()
+def add():
+    pass
+
+@add.command(name="channel")
+@click.argument("name")
+def add_channel(name):
     config = load_config()
-    if channel not in config["source_channels"]["channels"]:
-        config["source_channels"]["channels"].append(channel)
+    if name not in config["source_channels"]["channels"]:
+        config["source_channels"]["channels"].append(name)
         save_config(config)
-        click.echo(f"Added {channel} to source channels.")
+        click.echo(f"Added channel: {name}")
     else:
-        click.echo(f"{channel} is already in the list.")
+        click.echo(f"Channel {name} already exists")
 
-@cli.command(help="Remove a source channel.")
-@click.argument("channel")
-def remove(channel: str) -> None:
+@add.command(name="folder")
+@click.argument("name")
+def add_folder(name):
     config = load_config()
-    if channel in config["source_channels"]["channels"]:
-        config["source_channels"]["channels"].remove(channel)
+    if "source" not in config: config["source"] = {"folder": []}
+    if name not in config["source"]["folder"]:
+        config["source"]["folder"].append(name)
         save_config(config)
-        click.echo(f"Removed {channel} from source channels.")
+        click.echo(f"Added folder: {name}")
     else:
-        click.echo(f"{channel} not found in the list.")
+        click.echo(f"Folder {name} already exists")
 
-@cli.command(name="list", help="List all source channels.")
-def list_channels() -> None:
+@cli.group()
+def remove():
+    pass
+
+@remove.command(name="channel")
+@click.argument("name")
+def remove_channel(name):
     config = load_config()
-    channels = config["source_channels"]["channels"]
-    if not channels:
-        click.echo("No source channels configured.")
+    if name in config["source_channels"]["channels"]:
+        config["source_channels"]["channels"].remove(name)
+        save_config(config)
+        click.echo(f"Removed channel: {name}")
     else:
-        click.echo("Source Channels:")
-        for c in channels:
-            click.echo(f"  - {c}")
+        click.echo(f"Channel {name} not found")
 
-@cli.command(help="Start the Telegram aggregator userbot.")
-def run() -> None:
+@remove.command(name="folder")
+@click.argument("name")
+def remove_folder(name):
+    config = load_config()
+    if "source" in config and name in config["source"]["folder"]:
+        config["source"]["folder"].remove(name)
+        save_config(config)
+        click.echo(f"Removed folder: {name}")
+    else:
+        click.echo(f"Folder {name} not found")
+
+@cli.command(name="list")
+def list_all():
+    config = load_config()
+    folders = config.get("source", {}).get("folder", [])
+    channels = config.get("source_channels", {}).get("channels", [])
+    click.echo("📁 Folders:")
+    for f in folders: click.echo(f"  - {f}")
+    if not folders: click.echo("  (none)")
+    click.echo("\n📺 Channels:")
+    for c in channels: click.echo(f"  - {c}")
+    if not channels: click.echo("  (none)")
+
+@cli.command(help="Start the bot")
+def run():
     asyncio.run(main())
 
-async def start_client() -> TelegramClient | None:
+async def get_client():
     client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
     await client.start(phone=PHONE)
-
     me = await client.get_me()
-    logger.info(f"Authorized as: {me.username or me.first_name} (ID: {me.id}, Bot: {me.bot})")
-
     if me.bot:
-        logger.error("Logged in as a BOT. Userbots must use a user account. Delete session.session and retry.")
+        logger.error("You must use a user account, not a bot token")
         return None
-
+    logger.info(f"Logged in as {me.first_name}")
     return client
 
-async def resolve_channels(client: TelegramClient, channels: list[str]) -> tuple[list[int], list[str]]:
-    resolved: list[int] = []
-    inactive: list[str] = []
-
+async def resolve_channels(client, channels):
+    active, inactive = [], []
     for channel in channels:
         try:
             entity = await client.get_entity(channel)
-            resolved.append(entity.id)
+            active.append(entity.id)
         except Exception as e:
-            logger.error(f"Could not resolve channel '{channel}': {e}")
+            logger.error(f"Failed to resolve {channel}: {e}")
             inactive.append(str(channel))
+    return active, inactive
 
-    return resolved, inactive
-
-
-async def main() -> None:
-    logger.info("Starting Telegram Aggregator...")
-
-    await db.initialize()
-
-    config = load_config()
-
-    client = await start_client()
-    if not client:
-        return
-
-    folder_input = config.get("source", {}).get("folder")
+async def main():
+    logger.info("Starting Aggregator...")
+    await db.connect()
     
-    resolved_channels: list[int] = []
-    inactive_channels: list[str] = []
+    config = load_config()
+    client = await get_client()
+    if not client: return
 
-    if folder_input:
-        target_folders = folder_input if isinstance(folder_input, list) else [folder_input]
-        logger.info(f"Using Telegram folder(s): {target_folders}")
+    active_ids = []
+    inactive_names = []
+    
+    folder_names = config.get("source", {}).get("folder", [])
+    if isinstance(folder_names, str): folder_names = [folder_names]
         
-        for name in target_folders:
-            try:
-                channels = await get_channels_from_folder(client, name)
-                if channels:
-                    resolved_channels.extend(channels)
-                    logger.info(f"Added {len(channels)} channels from folder: '{name}'")
-                else:
-                    logger.warning(f"No channels found in folder: '{name}'")
-            except Exception as e:
-                logger.error(f"Error processing folder '{name}': {e}")
-        
-        resolved_channels = list(set(resolved_channels))
-        
-    else:
-        source_channels: list[str] = config.get("source_channels", {}).get("channels", [])
-        if not source_channels:
-            logger.warning("No source channels configured. Use 'add <channel>' or set a folder in config.toml.")
-        
-        resolved_channels, inactive_channels = await resolve_channels(client, source_channels)
+    for name in folder_names:
+        folder_ids = await get_channels_from_folder(client, name)
+        if folder_ids:
+            active_ids.extend(folder_ids)
+        else:
+            inactive_names.append(f"Folder: {name}")
 
-    if not resolved_channels:
-        logger.error("No active channels to listen to. Exiting.")
+    static_channels = config.get("source_channels", {}).get("channels", [])
+    static_active, static_inactive = await resolve_channels(client, static_channels)
+    
+    active_ids.extend(static_active)
+    inactive_names.extend(static_inactive)
+
+    unique_active = list(set(active_ids))
+    
+    if not unique_active:
+        logger.error("No active channels to monitor")
         return
 
-    await catch_up(client, db, resolved_channels)
-    await register_handlers(client, db, resolved_channels, resolved_channels, inactive_channels)
+    await register_handlers(client, db, unique_active, inactive_names)
+    await catch_up(client, db, unique_active)
 
-    logger.success(f"Userbot is running and listening to {len(resolved_channels)} channels.")
-    await client.run_until_disconnected()
-
+    logger.success(f"Running! Monitoring {len(unique_active)} channels")
+    
+    try:
+        await client.run_until_disconnected()
+    finally:
+        await db.disconnect()
 
 if __name__ == "__main__":
-    try:
-        import tomli_w
-    except ImportError:
-        logger.error("Missing dependency 'tomli_w'. Install it with: uv add tomli-w")
-        sys.exit(1)
-
     cli()

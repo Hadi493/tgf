@@ -2,20 +2,13 @@ import hashlib
 from telethon.tl.types import Message, Chat, Channel
 from datetime import datetime
 
-def format_message(message: Message, chat: Chat | Channel) -> str:
-    source_title = getattr(chat, 'title', 'Unknown Source')
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    header = f"**{source_title}** | {timestamp}\n\n"
-    original_text = message.text or ""
-    
-    return f"{header}{original_text}"
+def format_header(chat: Chat | Channel, source_url: str) -> str:
+    name = getattr(chat, 'title', getattr(chat, 'first_name', 'Unknown'))
+    return f"**{name}** ([Source]({source_url}))"
 
 def get_content_hash(message: Message) -> str:
     text = message.text or ""
-    media_info = str(message.media) if message.media else ""
-    reply_info = str(message.reply_to_msg_id) if message.reply_to_msg_id else ""
-    chat_id = str(message.chat_id)
-    msg_id = str(message.id)
-    raw_data = f"{chat_id}{msg_id}{text}{media_info}{reply_info}"
-    return hashlib.sha256(raw_data.encode()).hexdigest()
+    media = str(message.media) if message.media else ""
+    reply = str(message.reply_to_msg_id) if message.reply_to_msg_id else ""
+    data = f"{message.chat_id}{message.id}{text}{media}{reply}"
+    return hashlib.sha256(data.encode()).hexdigest()
