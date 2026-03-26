@@ -2,7 +2,7 @@ import os
 import asyncio
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaWebPage, Channel, Chat
-from telethon.errors import MessageNotModifiedError, FloodWaitError
+from telethon.errors import MessageNotModifiedError, FloodWaitError, MessageIdInvalidError
 from loguru import logger
 from db.storage import Database
 from utils.formatter import get_content_hash, format_header
@@ -140,6 +140,9 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
                 await client.edit_message(aggregator, agg_id, text=safe_text, link_preview=False)
                 await asyncio.sleep(1)
         except MessageNotModifiedError: pass
+        except MessageIdInvalidError:
+            logger.warning(f"Message {event.id} in {event.chat_id} not found in aggregator. Removing stale mapping.")
+            await db.delete_mapping(event.chat_id, event.id)
         except FloodWaitError as e: await asyncio.sleep(e.seconds)
         except Exception as e: logger.error(f"Edit error: {e}")
 
@@ -153,3 +156,4 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
                         await client.delete_messages(aggregator, agg_id)
                         await asyncio.sleep(1)
                 except: pass
+                await db.delete_mapping(event.chat_id, msg_id)

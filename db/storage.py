@@ -67,6 +67,13 @@ class Database:
             row = await cursor.fetchone()
             return row["aggregator_msg_id"] if row else None
 
+    async def delete_mapping(self, source_chat_id: int, source_msg_id: int):
+        await self.connection.execute(
+            "DELETE FROM message_mappings WHERE source_chat_id = ? AND source_msg_id = ?",
+            (source_chat_id, source_msg_id)
+        )
+        await self.connection.commit()
+
     async def get_last_message_id(self, source_chat_id: int) -> int:
         async with self.connection.execute(
             "SELECT MAX(source_msg_id) FROM message_mappings WHERE source_chat_id = ?", (source_chat_id,)
