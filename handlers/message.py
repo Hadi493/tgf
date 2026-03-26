@@ -31,13 +31,30 @@ async def register_handlers(client: TelegramClient, db: Database, source_channel
             if event.reply_to_msg_id:
                 reply_to = await db.get_mapping(event.chat_id, event.reply_to_msg_id)
 
-            sent_msg = await client.send_message(
-                aggregator,
-                f"**{name}**\n\n{event.message.text or ''}",
-                file=event.message.media,
-                reply_to=reply_to,
-                buttons=event.message.reply_markup
-            )
+            caption = f"**{name}**\n\n{event.message.text or ''}"
+            
+            if event.message.media and len(caption) > 1024:
+                # Send media with truncated caption and the full text as a reply
+                sent_msg = await client.send_message(
+                    aggregator,
+                    caption[:1021] + "...",
+                    file=event.message.media,
+                    reply_to=reply_to,
+                    buttons=event.message.reply_markup
+                )
+                await client.send_message(
+                    aggregator,
+                    caption,
+                    reply_to=sent_msg.id
+                )
+            else:
+                sent_msg = await client.send_message(
+                    aggregator,
+                    caption,
+                    file=event.message.media,
+                    reply_to=reply_to,
+                    buttons=event.message.reply_markup
+                )
 
             await db.mark_as_seen(content_hash)
             await db.save_mapping(event.chat_id, event.message.id, sent_msg.id)
