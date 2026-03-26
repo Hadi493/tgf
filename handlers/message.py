@@ -1,5 +1,6 @@
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaWebPage
+from telethon.errors import MessageNotModifiedError
 from loguru import logger
 from db.storage import Database
 from utils.formatter import get_content_hash
@@ -147,6 +148,8 @@ async def register_handlers(client: TelegramClient, db: Database, source_channel
                 link_preview=False
             )
             logger.info(f"Updated edited message from {name}")
+        except MessageNotModifiedError:
+            pass
         except Exception as e:
             logger.error(f"Error handling edit: {e}")
 
