@@ -109,7 +109,7 @@ async def catch_up(client: TelegramClient, db: Database, source_channels: list):
     except Exception as e:
         logger.error(f"Error during catch up: {e}")
 
-async def register_handlers(client: TelegramClient, db: Database, source_channels: list):
+async def register_handlers(client: TelegramClient, db: Database, config_channels: list, resolved_channels: list, inactive_channels: list):
     aggregator_channel = get_aggregator_channel()
 
     try:
@@ -119,18 +119,46 @@ async def register_handlers(client: TelegramClient, db: Database, source_channel
         logger.error(f"Could not resolve aggregator channel '{aggregator_channel}': {e}")
         return
 
-    @client.on(events.Album(chats=source_channels))
+    @client.on(events.NewMessage(pattern='/status', outgoing=True))
+    async def handle_status(event):
+        try:
+            stats = await db.get_stats()
+            total_config = len(config_channels)
+            total_active = len(resolved_channels)
+            total_inactive = len(inactive_channels)
+            
+            status_msg = (
+                "📊 **Bot Status**\n\n"
+                f"✅ **Total Configured:** `{total_config}`\n"
+                f"🟢 **Active (Listening):** `{total_active}`\n"
+                f"🔴 **Inactive:** `{total_inactive}`\n\n"
+                f"📝 **Forwarded Messages:** `{stats['total_forwarded']}`\n"
+                f"🔍 **Seen Unique Hashes:** `{stats['total_seen']}`\n"
+            )
+            
+            if total_inactive > 0:
+                inactive_list = "\n".join([f"- `{c}`" for c in inactive_channels])
+                status_msg += f"\n❌ **Inactive Details:**\n{inactive_list}"
+                
+            await event.edit(status_msg)
+        except Exception as e:
+            logger.error(f"Error in status command: {e}")
+
+    @client.on(events.Album(chats=resolved_channels))
     async def handle_album(event):
         await process_message(client, db, aggregator, event.chat_id, event.messages, is_album=True)
 
-    @client.on(events.NewMessage(chats=source_channels, func=lambda e: e.grouped_id is None))
+    @client.on(events.NewMessage(chats=resolved_channels, func=lambda e: e.grouped_id is None))
     async def handle_new_message(event):
+        if event.message.text and event.message.text.startswith('/status') and event.message.out:
+            return # Handled by Pattern handler
         await process_message(client, db, aggregator, event.chat_id, [event.message], is_album=False)
 
-    @client.on(events.MessageEdited(chats=source_channels))
+    @client.on(events.MessageEdited(chats=resolved_channels))
     async def handle_edit(event):
         try:
             aggregator_msg_id = await db.get_mapping(event.chat_id, event.id)
+
             if not aggregator_msg_id:
                 return
 

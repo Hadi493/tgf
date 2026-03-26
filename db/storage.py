@@ -67,3 +67,14 @@ class Database:
             ) as cursor:
                 row = await cursor.fetchone()
                 return row[0] if row and row[0] else 0
+
+    async def get_stats(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT count(*) FROM seen_messages") as cursor:
+                total_seen = (await cursor.fetchone())[0]
+            async with db.execute("SELECT count(*) FROM message_mappings") as cursor:
+                total_forwarded = (await cursor.fetchone())[0]
+            return {
+                "total_seen": total_seen,
+                "total_forwarded": total_forwarded
+            }

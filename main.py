@@ -95,13 +95,15 @@ async def start_client():
 
 async def resolve_channels(client, source_channels):
     resolved_channels = []
+    inactive_channels = []
     for channel in source_channels:
         try:
             entity = await client.get_entity(channel)
             resolved_channels.append(entity.id)
         except Exception as e:
             logger.error(f"Could not resolve source channel '{channel}': {e}")
-    return resolved_channels
+            inactive_channels.append(str(channel))
+    return resolved_channels, inactive_channels
 
 async def main():
     logger.info("Starting Telegram Aggregator...")
@@ -114,11 +116,11 @@ async def main():
     if not client:
         return
     
-    resolved_channels = await resolve_channels(client, source_channels)
+    resolved_channels, inactive_channels = await resolve_channels(client, source_channels)
     
     await catch_up(client, db, resolved_channels)
     
-    await register_handlers(client, db, resolved_channels)
+    await register_handlers(client, db, source_channels, resolved_channels, inactive_channels)
     
     logger.success("Userbot is running and listening for messages.")
     await client.run_until_disconnected()
