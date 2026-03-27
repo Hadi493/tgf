@@ -140,13 +140,17 @@ async def catch_up(client: TelegramClient, db: Database, channels: list):
     
     for chat_id in channels:
         last_id = await db.get_last_message_id(chat_id)
-        limit = 10 if last_id == 0 else None
-        min_id = last_id if last_id > 0 else None
+        
+        params = {"reverse": True}
+        if last_id == 0:
+            params["limit"] = 10
+        else:
+            params["min_id"] = last_id
         
         current_album = []
         current_gid = None
         
-        async for msg in client.iter_messages(chat_id, limit=limit, min_id=min_id, reverse=True):
+        async for msg in client.iter_messages(chat_id, **params):
             if msg.grouped_id:
                 if current_gid and msg.grouped_id == current_gid:
                     current_album.append(msg)
