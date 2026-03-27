@@ -12,7 +12,15 @@ CAPTION_LIMIT = 1024
 send_lock = asyncio.Lock()
 
 def get_aggregator_id():
-    return os.getenv("TELEGRAM_AGGREGATOR_CHANNEL")
+    val = os.getenv("TELEGRAM_AGGREGATOR_CHANNEL")
+    if not val:
+        return None
+    # If it's a numeric ID (like -100123 or 123), convert to int
+    if val.startswith('-') and val[1:].isdigit():
+        return int(val)
+    if val.isdigit():
+        return int(val)
+    return val
 
 async def get_chat_link(client: TelegramClient, chat_id: int, message_id: int) -> str:
     try:
@@ -56,7 +64,7 @@ async def send_to_aggregator(client, aggregator, text, media=None, reply_to=None
                 return sent
             
             sent = await client.send_message(aggregator, text, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
-            await asyncio.sleep(1)
+            await asyncio.sleep(3)
             return sent
         except FloodWaitError as e:
             logger.warning(f"Flood wait: {e.seconds}s")
