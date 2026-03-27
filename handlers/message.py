@@ -43,7 +43,7 @@ async def send_to_aggregator(client, aggregator, text, media=None, reply_to=None
                 if len(text) > CAPTION_LIMIT:
                     await asyncio.sleep(1)
                     await split_and_send(client, aggregator, text, reply_to=main_msg.id)
-                return main_msg
+                return sent
 
             has_media = media and not isinstance(media, MessageMediaWebPage)
             limit = CAPTION_LIMIT if has_media else TEXT_LIMIT
@@ -63,13 +63,19 @@ async def send_to_aggregator(client, aggregator, text, media=None, reply_to=None
             await asyncio.sleep(e.seconds)
             return await send_to_aggregator(client, aggregator, text, media, reply_to, buttons, is_album, messages)
 
-async def process_message(client, db, aggregator, chat_id, messages, is_album=False):
+async def process_message(client, db, aggregator, chat_id, messages, is_album=False, chat=None):
     try:
+        if not messages: return
         main_msg = messages[0]
+        
+        # Check if any message in the album/set is a duplicate
+        # For simplicity, we check the first one, but we will mark all as seen
         content_hash = get_content_hash(main_msg)
         if await db.is_duplicate(content_hash): return
 
-        chat = await client.get_entity(chat_id)
+        if not chat:
+            chat = await client.get_entity(chat_id)
+        
         link = await get_chat_link(client, chat_id, main_msg.id)
         text = f"{format_header(chat, link)}\n\n{main_msg.text or ''}"
         
@@ -77,11 +83,25 @@ async def process_message(client, db, aggregator, chat_id, messages, is_album=Fa
         if main_msg.reply_to_msg_id:
             reply_to = await db.get_mapping(chat_id, main_msg.reply_to_msg_id)
 
-        sent_msg = await send_to_aggregator(client, aggregator, text, media=main_msg.media, reply_to=reply_to, buttons=main_msg.reply_markup, is_album=is_album, messages=messages)
+        sent_result = await send_to_aggregator(
+            client, aggregator, text, 
+            media=main_msg.media, 
+            reply_to=reply_to, 
+            buttons=main_msg.reply_markup, 
+            is_album=is_album, 
+            messages=messages
+        )
 
-        if sent_msg:
+        if sent_result:
             await db.mark_as_seen(content_hash)
-            await db.save_mapping(chat_id, main_msg.id, sent_msg.id)
+            
+            if is_album and isinstance(sent_result, list):
+                for i in range(min(len(messages), len(sent_result))):
+                    await db.save_mapping(chat_id, messages[i].id, sent_result[i].id)
+            else:
+                sent_msg = sent_result[0] if isinstance(sent_result, list) else sent_result
+                await db.save_mapping(chat_id, main_msg.id, sent_msg.id)
+            
             logger.success(f"Forwarded from {getattr(chat, 'title', 'Unknown')}")
     except Exception as e:
         logger.error(f"Processing error: {e}")
@@ -90,11 +110,34 @@ async def catch_up(client: TelegramClient, db: Database, channels: list):
     aggregator = await client.get_entity(get_aggregator_id())
     for chat_id in channels:
         last_id = await db.get_last_message_id(chat_id)
-        limit = 5 if last_id == 0 else None
+        limit = 10 if last_id == 0 else None
         min_id = last_id if last_id > 0 else None
+        
+        current_album = []
+        current_gid = None
+        
         async for msg in client.iter_messages(chat_id, limit=limit, min_id=min_id, reverse=True):
-            await process_message(client, db, aggregator, chat_id, [msg])
-            await asyncio.sleep(2)
+            if msg.grouped_id:
+                if current_gid and msg.grouped_id == current_gid:
+                    current_album.append(msg)
+                else:
+                    if current_album:
+                        await process_message(client, db, aggregator, chat_id, current_album, is_album=True)
+                        await asyncio.sleep(1)
+                    current_album = [msg]
+                    current_gid = msg.grouped_id
+            else:
+                if current_album:
+                    await process_message(client, db, aggregator, chat_id, current_album, is_album=True)
+                    await asyncio.sleep(1)
+                    current_album = []
+                    current_gid = None
+                await process_message(client, db, aggregator, chat_id, [msg])
+                await asyncio.sleep(1)
+        
+        if current_album:
+            await process_message(client, db, aggregator, chat_id, current_album, is_album=True)
+            await asyncio.sleep(1)
 
 async def register_handlers(client: TelegramClient, db: Database, active_ids: list, inactive_names: list):
     aggregator = await client.get_entity(get_aggregator_id())
@@ -118,12 +161,12 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
 
     @client.on(events.Album(chats=active_ids))
     async def album_handler(event):
-        await process_message(client, db, aggregator, event.chat_id, event.messages, is_album=True)
+        await process_message(client, db, aggregator, event.chat_id, event.messages, is_album=True, chat=await event.get_chat())
 
     @client.on(events.NewMessage(chats=active_ids, func=lambda e: e.grouped_id is None))
     async def message_handler(event):
         if event.out and event.text.startswith('/status'): return
-        await process_message(client, db, aggregator, event.chat_id, [event.message])
+        await process_message(client, db, aggregator, event.chat_id, [event.message], chat=await event.get_chat())
 
     @client.on(events.MessageEdited(chats=active_ids))
     async def edit_handler(event):
