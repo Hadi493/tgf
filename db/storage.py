@@ -27,14 +27,45 @@ class Database:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        await self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS message_mappings (
-                source_chat_id INTEGER,
-                source_msg_id INTEGER,
-                aggregator_msg_id INTEGER,
-                PRIMARY KEY (source_chat_id, source_msg_id)
-            )
-        """)
+        
+        # Migration for multi-aggregator support
+        cursor = await self.connection.execute("PRAGMA table_info(message_mappings)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        
+        if not columns:
+            await self.connection.execute("""
+                CREATE TABLE message_mappings (
+                    source_chat_id INTEGER,
+                    source_msg_id INTEGER,
+                    aggregator_id INTEGER,
+                    aggregator_msg_id INTEGER,
+                    PRIMARY KEY (source_chat_id, source_msg_id, aggregator_id)
+                )
+            """)
+        elif "aggregator_id" not in columns:
+            # We need to recreate the table to change the Primary Key
+            agg_id_default = os.getenv("TELEGRAM_AGGREGATOR_CHANNEL") or 0
+            try:
+                agg_id_default = int(agg_id_default) if str(agg_id_default).replace('-','').isdigit() else 0
+            except:
+                agg_id_default = 0
+
+            await self.connection.execute("ALTER TABLE message_mappings RENAME TO old_message_mappings")
+            await self.connection.execute("""
+                CREATE TABLE message_mappings (
+                    source_chat_id INTEGER,
+                    source_msg_id INTEGER,
+                    aggregator_id INTEGER,
+                    aggregator_msg_id INTEGER,
+                    PRIMARY KEY (source_chat_id, source_msg_id, aggregator_id)
+                )
+            """)
+            await self.connection.execute(f"""
+                INSERT INTO message_mappings (source_chat_id, source_msg_id, aggregator_id, aggregator_msg_id)
+                SELECT source_chat_id, source_msg_id, {agg_id_default}, aggregator_msg_id FROM old_message_mappings
+            """)
+            await self.connection.execute("DROP TABLE old_message_mappings")
+
         await self.connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_mappings_source ON message_mappings (source_chat_id, source_msg_id)"
         )
@@ -52,25 +83,25 @@ class Database:
         )
         await self.connection.commit()
 
-    async def save_mapping(self, source_chat_id: int, source_msg_id: int, aggregator_msg_id: int):
+    async def save_mapping(self, source_chat_id: int, source_msg_id: int, aggregator_msg_id: int, aggregator_id: int):
         await self.connection.execute(
-            "INSERT OR REPLACE INTO message_mappings (source_chat_id, source_msg_id, aggregator_msg_id) VALUES (?, ?, ?)",
-            (source_chat_id, source_msg_id, aggregator_msg_id)
+            "INSERT OR REPLACE INTO message_mappings (source_chat_id, source_msg_id, aggregator_id, aggregator_msg_id) VALUES (?, ?, ?, ?)",
+            (source_chat_id, source_msg_id, aggregator_id, aggregator_msg_id)
         )
         await self.connection.commit()
 
-    async def get_mapping(self, source_chat_id: int, source_msg_id: int) -> int | None:
+    async def get_mapping(self, source_chat_id: int, source_msg_id: int, aggregator_id: int) -> int | None:
         async with self.connection.execute(
-            "SELECT aggregator_msg_id FROM message_mappings WHERE source_chat_id = ? AND source_msg_id = ?",
-            (source_chat_id, source_msg_id)
+            "SELECT aggregator_msg_id FROM message_mappings WHERE source_chat_id = ? AND source_msg_id = ? AND aggregator_id = ?",
+            (source_chat_id, source_msg_id, aggregator_id)
         ) as cursor:
             row = await cursor.fetchone()
             return row["aggregator_msg_id"] if row else None
 
-    async def delete_mapping(self, source_chat_id: int, source_msg_id: int):
+    async def delete_mapping(self, source_chat_id: int, source_msg_id: int, aggregator_id: int):
         await self.connection.execute(
-            "DELETE FROM message_mappings WHERE source_chat_id = ? AND source_msg_id = ?",
-            (source_chat_id, source_msg_id)
+            "DELETE FROM message_mappings WHERE source_chat_id = ? AND source_msg_id = ? AND aggregator_id = ?",
+            (source_chat_id, source_msg_id, aggregator_id)
         )
         await self.connection.commit()
 

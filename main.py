@@ -163,7 +163,20 @@ async def main():
         return
 
     await register_handlers(client, db, unique_active, inactive_names)
-    await catch_up(client, db, unique_active)
+    
+    if os.getenv("CATCH_UP", "true").lower() == "true":
+        await catch_up(client, db, unique_active)
+    else:
+        logger.info("Skipping catch-up. Monitoring only new messages.")
+        from handlers.message import get_aggregators
+        aggregators = get_aggregators()
+        agg_id = aggregators[0] if aggregators else 0
+        
+        for chat_id in unique_active:
+            last_id = await db.get_last_message_id(chat_id)
+            if last_id == 0:
+                async for msg in client.iter_messages(chat_id, limit=1):
+                    await db.save_mapping(chat_id, msg.id, 0, agg_id) 
 
     logger.success(f"Running! Monitoring {len(unique_active)} channels")
     
