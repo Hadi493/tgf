@@ -218,6 +218,8 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
                     async with send_lock:
                         await client.edit_message(agg, agg_id, text=safe_text, link_preview=False)
                         await asyncio.sleep(0.5)
+                except MessageNotModifiedError:
+                    pass 
                 except Exception as e:
                     logger.warning(f"Failed to edit in {agg}: {e}")
         except Exception as e: logger.error(f"Edit error: {e}")
