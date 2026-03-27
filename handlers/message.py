@@ -123,21 +123,21 @@ async def catch_up(client: TelegramClient, db: Database, channels: list):
                 else:
                     if current_album:
                         await process_message(client, db, aggregator, chat_id, current_album, is_album=True)
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(2)
                     current_album = [msg]
                     current_gid = msg.grouped_id
             else:
                 if current_album:
                     await process_message(client, db, aggregator, chat_id, current_album, is_album=True)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2)
                     current_album = []
                     current_gid = None
                 await process_message(client, db, aggregator, chat_id, [msg])
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
         
         if current_album:
             await process_message(client, db, aggregator, chat_id, current_album, is_album=True)
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
 
 async def register_handlers(client: TelegramClient, db: Database, active_ids: list, inactive_names: list):
     aggregator = await client.get_entity(get_aggregator_id())
