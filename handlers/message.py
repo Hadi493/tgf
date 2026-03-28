@@ -79,7 +79,7 @@ async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map
                     sent = await client.send_message(aggregator, text, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
                     sent_messages[aggregator] = sent
                 
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
             except FloodWaitError as e:
                 logger.warning(f"Flood wait for {aggregator}: {e.seconds}s")
                 await asyncio.sleep(e.seconds)
