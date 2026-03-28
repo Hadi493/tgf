@@ -23,13 +23,11 @@ def _parse_id(val):
 
 def get_aggregators():
     channels = []
-    # Support both CHANNEL and BOT env vars
     for env_var in ["TELEGRAM_AGGREGATOR_CHANNEL", "TELEGRAM_AGGREGATOR_BOT"]:
         val = os.getenv(env_var)
         parsed = _parse_id(val)
         if parsed:
             channels.append(parsed)
-    # Remove duplicates while preserving order
     unique_channels = []
     for c in channels:
         if c not in unique_channels:
@@ -60,7 +58,6 @@ async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map
         sent_messages = {} # Map aggregator -> sent_msg
         for aggregator in aggregators:
             try:
-                # Resolve reply_to for this specific aggregator
                 reply_to = reply_to_map.get(aggregator) if reply_to_map else None
                 
                 if is_album:
@@ -104,7 +101,6 @@ async def process_message(client, db, aggregators, chat_id, messages, is_album=F
         link = await get_chat_link(client, chat_id, main_msg.id)
         text = f"{format_header(chat, link)}\n\n{main_msg.text or ''}"
         
-        # Build a map of reply_to IDs for each aggregator
         reply_to_map = {}
         if main_msg.reply_to_msg_id:
             for agg in aggregators:
