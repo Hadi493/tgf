@@ -23,13 +23,11 @@ def _parse_id(val):
 
 def get_aggregators():
     channels = []
-    # Support both CHANNEL and BOT env vars
     for env_var in ["TELEGRAM_AGGREGATOR_CHANNEL", "TELEGRAM_AGGREGATOR_BOT"]:
         val = os.getenv(env_var)
         parsed = _parse_id(val)
         if parsed:
             channels.append(parsed)
-    # Remove duplicates while preserving order
     unique_channels = []
     for c in channels:
         if c not in unique_channels:
