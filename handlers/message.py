@@ -220,6 +220,9 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
                         await asyncio.sleep(0.5)
                 except MessageNotModifiedError:
                     pass 
+                except MessageIdInvalidError:
+                    logger.info(f"Message {agg_id} in {agg} no longer exists, deleting mapping.")
+                    await db.delete_mapping(event.chat_id, event.id, agg)
                 except Exception as e:
                     logger.warning(f"Failed to edit in {agg}: {e}")
         except Exception as e: logger.error(f"Edit error: {e}")
