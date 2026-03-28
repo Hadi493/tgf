@@ -41,4 +41,3 @@ uv run main.py remove channelsusername
 uv run main.py list
 ```
 
-*This is a personal project I use daily. Feel free to use it, but remember it's provided "as-is"!*
