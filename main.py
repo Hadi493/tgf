@@ -1,6 +1,12 @@
 import asyncio
 import os
 import sys
+import platform
+
+# Fix for Windows asyncio loop
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import tomllib
 import tomli_w
 import click
