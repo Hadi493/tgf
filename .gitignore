@@ -8,5 +8,6 @@ __pycache__/
 bot.log
 diagnose.py
 db/storage.db
+db/storage.db-journal
 config.toml
 .DS_Store
