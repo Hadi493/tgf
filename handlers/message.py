@@ -54,12 +54,11 @@ async def split_and_send(client, aggregator, chunks, reply_to=None):
 
 async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map=None, buttons=None, is_album=False, messages=None):
     async with send_lock:
-        sent_messages = {} # Map aggregator -> sent_msg
+        sent_messages = {} 
         for aggregator in aggregators:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    # Resolve reply_to for this specific aggregator
                     reply_to = reply_to_map.get(aggregator) if reply_to_map else None
                     
                     has_media = media and not isinstance(media, MessageMediaWebPage)
@@ -75,7 +74,7 @@ async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map
                         else:
                             sent = await client.send_file(aggregator, messages, caption=text, reply_to=reply_to)
                         sent_messages[aggregator] = sent
-                        break # Success
+                        break 
 
                     if len(text) > limit:
                         truncated = text[:limit-3] + "..."
@@ -89,7 +88,7 @@ async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map
                         sent_messages[aggregator] = sent
                     
                     await asyncio.sleep(1)
-                    break # Success
+                    break 
                     
                 except FloodWaitError as e:
                     logger.warning(f"Flood wait for {aggregator}: {e.seconds}s. Attempt {attempt+1}/{max_retries}")
@@ -98,7 +97,7 @@ async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map
                         logger.error(f"Max retries reached for {aggregator}")
                 except Exception as e:
                     logger.error(f"Failed to send to {aggregator} on attempt {attempt+1}: {e}")
-                    break # Other errors don't necessarily merit a retry
+                    break 
         return sent_messages
 
 async def process_message(client, db, aggregators, chat_id, messages, is_album=False, chat=None):
@@ -115,7 +114,7 @@ async def process_message(client, db, aggregators, chat_id, messages, is_album=F
         link = await get_chat_link(client, chat_id, main_msg.id)
         text = f"{format_header(chat, link)}\n\n{main_msg.text or ''}"
         
-        # Build a map of reply_to IDs for each aggregator
+        
         reply_to_map = {}
         if main_msg.reply_to_msg_id:
             for agg in aggregators:
