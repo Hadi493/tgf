@@ -125,7 +125,7 @@ async def resolve_channels(client, channels):
             entity = await client.get_entity(channel)
             active.append(entity.id)
         except Exception as e:
-            logger.error(f"Failed to resolve {channel}: {e}")
+            logger.warning(f"Skipping inaccessible source '{channel}': {e}")
             inactive.append(str(channel))
     return active, inactive
 
@@ -144,11 +144,9 @@ async def main():
     if isinstance(folder_names, str): folder_names = [folder_names]
         
     for name in folder_names:
-        folder_ids = await get_channels_from_folder(client, name)
-        if folder_ids:
-            active_ids.extend(folder_ids)
-        else:
-            inactive_names.append(f"Folder: {name}")
+        folder_ids, folder_inactive = await get_channels_from_folder(client, name)
+        active_ids.extend(folder_ids)
+        inactive_names.extend(folder_inactive)
 
     static_channels = config.get("source_channels", {}).get("channels", [])
     static_active, static_inactive = await resolve_channels(client, static_channels)

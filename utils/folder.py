@@ -2,7 +2,7 @@ from telethon import TelegramClient
 from telethon.tl.functions.messages import GetDialogFiltersRequest
 from loguru import logger
 
-async def get_channels_from_folder(client: TelegramClient, folder_name: str) -> list[int]:
+async def get_channels_from_folder(client: TelegramClient, folder_name: str) -> tuple[list[int], list[str]]:
     result = await client(GetDialogFiltersRequest())
 
     for filter_obj in result.filters:
@@ -10,15 +10,18 @@ async def get_channels_from_folder(client: TelegramClient, folder_name: str) -> 
             continue
 
         ids = []
+        inactive = []
         for peer in filter_obj.include_peers:
             try:
                 entity = await client.get_entity(peer)
                 ids.append(entity.id)
             except Exception as e:
-                logger.warning(f"Failed to resolve {peer}: {e}")
+                peer_id = getattr(peer, 'channel_id', getattr(peer, 'chat_id', getattr(peer, 'user_id', peer)))
+                logger.warning(f"Skipping inaccessible source {peer_id} in folder '{folder_name}': {e}")
+                inactive.append(f"{folder_name}/{peer_id}")
 
         logger.info(f"Found {len(ids)} channels in '{folder_name}'")
-        return ids
+        return ids, inactive
 
     logger.error(f"Folder '{folder_name}' not found")
-    return []
+    return [], [f"Folder: {folder_name}"]
