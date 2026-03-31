@@ -1,6 +1,11 @@
 import asyncio
 import os
 import sys
+import platform
+
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import tomllib
 import tomli_w
 import click
@@ -162,8 +167,17 @@ async def main():
 
     await register_handlers(client, db, unique_active, inactive_names)
     
-    if os.getenv("CATCH_UP", "true").lower() == "true":
+    catch_up_val = os.getenv("CATCH_UP", "true").lower()
+    if catch_up_val == "true":
         await catch_up(client, db, unique_active)
+    elif catch_up_val != "false":
+        from utils.formatter import parse_duration
+        duration = parse_duration(catch_up_val)
+        if duration:
+            logger.info(f"Catch-up started for last {catch_up_val}")
+            await catch_up(client, db, unique_active, duration=duration)
+        else:
+            logger.warning(f"Invalid CATCH_UP value: {catch_up_val}. Skipping catch-up.")
     else:
         logger.info("Skipping catch-up. Monitoring only new messages.")
         from handlers.message import get_aggregators

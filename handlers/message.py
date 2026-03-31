@@ -1,5 +1,6 @@
 import os
 import asyncio
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaWebPage, Channel, Chat
 from telethon.errors import MessageNotModifiedError, FloodWaitError, MessageIdInvalidError
@@ -44,8 +45,7 @@ async def get_chat_link(client: TelegramClient, chat_id: int, message_id: int) -
     except:
         return f"https://t.me/c/{str(chat_id).replace('-100', '')}/{message_id}"
 
-async def split_and_send(client, aggregator, text, reply_to=None):
-    chunks = [text[i:i + TEXT_LIMIT] for i in range(0, len(text), TEXT_LIMIT)]
+async def split_and_send(client, aggregator, chunks, reply_to=None):
     last_sent = None
     for chunk in chunks:
         last_sent = await client.send_message(aggregator, chunk, reply_to=reply_to or last_sent, link_preview=False)
@@ -55,36 +55,50 @@ async def split_and_send(client, aggregator, text, reply_to=None):
 
 async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map=None, buttons=None, is_album=False, messages=None):
     async with send_lock:
-        sent_messages = {} # Map aggregator -> sent_msg
+        sent_messages = {} 
         for aggregator in aggregators:
-            try:
-                reply_to = reply_to_map.get(aggregator) if reply_to_map else None
-                
-                if is_album:
-                    caption = text if len(text) <= CAPTION_LIMIT else text[:1021] + "..."
-                    sent = await client.send_file(aggregator, messages, caption=caption, reply_to=reply_to)
-                    sent_messages[aggregator] = sent
-                    continue
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    reply_to = reply_to_map.get(aggregator) if reply_to_map else None
+                    
+                    has_media = media and not isinstance(media, MessageMediaWebPage)
+                    limit = CAPTION_LIMIT if has_media or is_album else TEXT_LIMIT
+                    
+                    if is_album:
+                        if len(text) > limit:
+                            caption = text[:limit-3] + "..."
+                            remaining_chunks = [text[i:i + TEXT_LIMIT] for i in range(limit-3, len(text), TEXT_LIMIT)]
+                            sent = await client.send_file(aggregator, messages, caption=caption, reply_to=reply_to)
+                            await asyncio.sleep(1)
+                            await split_and_send(client, aggregator, remaining_chunks, reply_to=sent[0].id if isinstance(sent, list) else sent.id)
+                        else:
+                            sent = await client.send_file(aggregator, messages, caption=text, reply_to=reply_to)
+                        sent_messages[aggregator] = sent
+                        break 
 
-                has_media = media and not isinstance(media, MessageMediaWebPage)
-                limit = CAPTION_LIMIT if has_media else TEXT_LIMIT
-                
-                if len(text) > limit:
-                    truncated = text[:limit-3] + "..."
-                    sent = await client.send_message(aggregator, truncated, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
+                    if len(text) > limit:
+                        truncated = text[:limit-3] + "..."
+                        remaining_chunks = [text[i:i + TEXT_LIMIT] for i in range(limit-3, len(text), TEXT_LIMIT)]
+                        sent = await client.send_message(aggregator, truncated, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
+                        await asyncio.sleep(1)
+                        await split_and_send(client, aggregator, remaining_chunks, reply_to=sent.id)
+                        sent_messages[aggregator] = sent
+                    else:
+                        sent = await client.send_message(aggregator, text, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
+                        sent_messages[aggregator] = sent
+                    
                     await asyncio.sleep(1)
-                    await split_and_send(client, aggregator, text, reply_to=sent.id)
-                    sent_messages[aggregator] = sent
-                else:
-                    sent = await client.send_message(aggregator, text, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
-                    sent_messages[aggregator] = sent
-                
-                await asyncio.sleep(2)
-            except FloodWaitError as e:
-                logger.warning(f"Flood wait for {aggregator}: {e.seconds}s")
-                await asyncio.sleep(e.seconds)
-            except Exception as e:
-                logger.error(f"Failed to send to {aggregator}: {e}")
+                    break 
+                    
+                except FloodWaitError as e:
+                    logger.warning(f"Flood wait for {aggregator}: {e.seconds}s. Attempt {attempt+1}/{max_retries}")
+                    await asyncio.sleep(e.seconds + 1)
+                    if attempt == max_retries - 1:
+                        logger.error(f"Max retries reached for {aggregator}")
+                except Exception as e:
+                    logger.error(f"Failed to send to {aggregator} on attempt {attempt+1}: {e}")
+                    break 
         return sent_messages
 
 async def process_message(client, db, aggregators, chat_id, messages, is_album=False, chat=None):
@@ -130,7 +144,7 @@ async def process_message(client, db, aggregators, chat_id, messages, is_album=F
     except Exception as e:
         logger.error(f"Processing error: {e}")
 
-async def catch_up(client: TelegramClient, db: Database, channels: list):
+async def catch_up(client: TelegramClient, db: Database, channels: list, duration: timedelta | None = None):
     aggregators = get_aggregators()
     if not aggregators: return
     
@@ -138,7 +152,9 @@ async def catch_up(client: TelegramClient, db: Database, channels: list):
         last_id = await db.get_last_message_id(chat_id)
         
         params = {"reverse": True}
-        if last_id == 0:
+        if duration:
+            params["offset_date"] = datetime.now() - duration
+        elif last_id == 0:
             params["limit"] = 10
         else:
             params["min_id"] = last_id

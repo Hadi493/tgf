@@ -28,7 +28,6 @@ class Database:
             )
         """)
         
-        # Migration for multi-aggregator support
         cursor = await self.connection.execute("PRAGMA table_info(message_mappings)")
         columns = [row[1] for row in await cursor.fetchall()]
         
@@ -43,7 +42,6 @@ class Database:
                 )
             """)
         elif "aggregator_id" not in columns:
-            # We need to recreate the table to change the Primary Key
             agg_id_default = os.getenv("TELEGRAM_AGGREGATOR_CHANNEL") or 0
             try:
                 agg_id_default = int(agg_id_default) if str(agg_id_default).replace('-','').isdigit() else 0
