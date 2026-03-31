@@ -1,5 +1,6 @@
 import os
 import asyncio
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaWebPage, Channel, Chat
 from telethon.errors import MessageNotModifiedError, FloodWaitError, MessageIdInvalidError
@@ -144,7 +145,7 @@ async def process_message(client, db, aggregators, chat_id, messages, is_album=F
     except Exception as e:
         logger.error(f"Processing error: {e}")
 
-async def catch_up(client: TelegramClient, db: Database, channels: list):
+async def catch_up(client: TelegramClient, db: Database, channels: list, duration: timedelta | None = None):
     aggregators = get_aggregators()
     if not aggregators: return
     
@@ -152,7 +153,9 @@ async def catch_up(client: TelegramClient, db: Database, channels: list):
         last_id = await db.get_last_message_id(chat_id)
         
         params = {"reverse": True}
-        if last_id == 0:
+        if duration:
+            params["offset_date"] = datetime.now() - duration
+        elif last_id == 0:
             params["limit"] = 10
         else:
             params["min_id"] = last_id
