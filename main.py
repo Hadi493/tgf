@@ -32,7 +32,10 @@ db = Database()
 
 def load_config() -> dict:
     if not os.path.exists(CONFIG_FILE):
-        return {"source": {"folder": []}, "source_channels": {"channels": []}}
+        return {
+            "source": {"folder": []},
+            "source_channels": {"channels": []}
+        }
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
@@ -137,17 +140,17 @@ async def resolve_channels(client, channels):
 async def main():
     logger.info("Starting Aggregator...")
     await db.connect()
-    
+
     config = load_config()
     client = await get_client()
     if not client: return
 
     active_ids = []
     inactive_names = []
-    
+
     folder_names = config.get("source", {}).get("folder", [])
     if isinstance(folder_names, str): folder_names = [folder_names]
-        
+
     for name in folder_names:
         folder_ids, folder_inactive = await get_channels_from_folder(client, name)
         active_ids.extend(folder_ids)
@@ -155,18 +158,18 @@ async def main():
 
     static_channels = config.get("source_channels", {}).get("channels", [])
     static_active, static_inactive = await resolve_channels(client, static_channels)
-    
+
     active_ids.extend(static_active)
     inactive_names.extend(static_inactive)
 
     unique_active = list(set(active_ids))
-    
+
     if not unique_active:
         logger.error("No active channels to monitor")
         return
 
     await register_handlers(client, db, unique_active, inactive_names)
-    
+
     catch_up_val = os.getenv("CATCH_UP", "true").lower()
     if catch_up_val == "true":
         await catch_up(client, db, unique_active)
@@ -183,15 +186,15 @@ async def main():
         from handlers.message import get_aggregators
         aggregators = get_aggregators()
         agg_id = aggregators[0] if aggregators else 0
-        
+
         for chat_id in unique_active:
             last_id = await db.get_last_message_id(chat_id)
             if last_id == 0:
                 async for msg in client.iter_messages(chat_id, limit=1):
-                    await db.save_mapping(chat_id, msg.id, 0, agg_id) 
+                    await db.save_mapping(chat_id, msg.id, 0, agg_id)
 
     logger.success(f"Running! Monitoring {len(unique_active)} channels")
-    
+
     try:
         await client.run_until_disconnected()
     finally:

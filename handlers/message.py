@@ -55,42 +55,76 @@ async def split_and_send(client, aggregator, chunks, reply_to=None):
 
 async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map=None, buttons=None, is_album=False, messages=None):
     async with send_lock:
-        sent_messages = {} 
+        sent_messages = {}
         for aggregator in aggregators:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
                     reply_to = reply_to_map.get(aggregator) if reply_to_map else None
-                    
+
                     has_media = media and not isinstance(media, MessageMediaWebPage)
                     limit = CAPTION_LIMIT if has_media or is_album else TEXT_LIMIT
-                    
+
                     if is_album:
                         if len(text) > limit:
                             caption = text[:limit-3] + "..."
                             remaining_chunks = [text[i:i + TEXT_LIMIT] for i in range(limit-3, len(text), TEXT_LIMIT)]
-                            sent = await client.send_file(aggregator, messages, caption=caption, reply_to=reply_to)
+                            sent = await client.send_file(
+                                aggregator,
+                                messages,
+                                caption=caption,
+                                reply_to=reply_to
+                            )
                             await asyncio.sleep(1)
-                            await split_and_send(client, aggregator, remaining_chunks, reply_to=sent[0].id if isinstance(sent, list) else sent.id)
+                            await split_and_send(
+                                client,
+                                aggregator,
+                                remaining_chunks,
+                                reply_to=sent[0].id if isinstance(sent, list) else sent.id
+                            )
                         else:
-                            sent = await client.send_file(aggregator, messages, caption=text, reply_to=reply_to)
+                            sent = await client.send_file(
+                                aggregator,
+                                messages,
+                                caption=text,
+                                reply_to=reply_to
+                            )
                         sent_messages[aggregator] = sent
-                        break 
+                        break
 
                     if len(text) > limit:
                         truncated = text[:limit-3] + "..."
                         remaining_chunks = [text[i:i + TEXT_LIMIT] for i in range(limit-3, len(text), TEXT_LIMIT)]
-                        sent = await client.send_message(aggregator, truncated, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
+                        sent = await client.send_message(
+                            aggregator,
+                            truncated,
+                            file=media if has_media else None,
+                            reply_to=reply_to,
+                            buttons=buttons,
+                            link_preview=False
+                        )
                         await asyncio.sleep(1)
-                        await split_and_send(client, aggregator, remaining_chunks, reply_to=sent.id)
+                        await split_and_send(
+                            client,
+                            aggregator,
+                            remaining_chunks,
+                            reply_to=sent.id
+                        )
                         sent_messages[aggregator] = sent
                     else:
-                        sent = await client.send_message(aggregator, text, file=media if has_media else None, reply_to=reply_to, buttons=buttons, link_preview=False)
+                        sent = await client.send_message(
+                            aggregator,
+                            text,
+                            file=media if has_media else None,
+                            reply_to=reply_to,
+                            buttons=buttons,
+                            link_preview=False
+                        )
                         sent_messages[aggregator] = sent
-                    
+
                     await asyncio.sleep(1)
-                    break 
-                    
+                    break
+
                 except FloodWaitError as e:
                     logger.warning(f"Flood wait for {aggregator}: {e.seconds}s. Attempt {attempt+1}/{max_retries}")
                     await asyncio.sleep(e.seconds + 1)
@@ -98,35 +132,51 @@ async def send_to_aggregator(client, aggregators, text, media=None, reply_to_map
                         logger.error(f"Max retries reached for {aggregator}")
                 except Exception as e:
                     logger.error(f"Failed to send to {aggregator} on attempt {attempt+1}: {e}")
-                    break 
+                    break
         return sent_messages
 
-async def process_message(client, db, aggregators, chat_id, messages, is_album=False, chat=None):
+async def process_message(
+        client,
+        db,
+        aggregators,
+        chat_id,
+        messages,
+        is_album=False,
+        chat=None
+):
     try:
         if not messages: return
         main_msg = messages[0]
-        
+
         content_hash = get_content_hash(main_msg)
         if await db.is_duplicate(content_hash): return
 
         if not chat:
             chat = await client.get_entity(chat_id)
-        
-        link = await get_chat_link(client, chat_id, main_msg.id)
+
+        link = await get_chat_link(
+            client,
+            chat_id,
+            main_msg.id
+        )
         text = f"{format_header(chat, link)}\n\n{main_msg.text or ''}"
-        
+
         reply_to_map = {}
         if main_msg.reply_to_msg_id:
             for agg in aggregators:
-                mapped_id = await db.get_mapping(chat_id, main_msg.reply_to_msg_id, agg)
+                mapped_id = await db.get_mapping(
+                    chat_id,
+                    main_msg.reply_to_msg_id,
+                    agg
+                )
                 if mapped_id: reply_to_map[agg] = mapped_id
 
         sent_results = await send_to_aggregator(
-            client, aggregators, text, 
-            media=main_msg.media, 
-            reply_to_map=reply_to_map, 
-            buttons=main_msg.reply_markup, 
-            is_album=is_album, 
+            client, aggregators, text,
+            media=main_msg.media,
+            reply_to_map=reply_to_map,
+            buttons=main_msg.reply_markup,
+            is_album=is_album,
             messages=messages
         )
 
@@ -135,11 +185,21 @@ async def process_message(client, db, aggregators, chat_id, messages, is_album=F
             for agg, sent_result in sent_results.items():
                 if is_album and isinstance(sent_result, list):
                     for i in range(min(len(messages), len(sent_result))):
-                        await db.save_mapping(chat_id, messages[i].id, sent_result[i].id, agg)
+                        await db.save_mapping(
+                            chat_id,
+                            messages[i].id,
+                            sent_result[i].id,
+                            agg
+                        )
                 else:
                     sent_msg = sent_result[0] if isinstance(sent_result, list) else sent_result
-                    await db.save_mapping(chat_id, main_msg.id, sent_msg.id, agg)
-            
+                    await db.save_mapping(
+                        chat_id,
+                        main_msg.id,
+                        sent_msg.id,
+                        agg
+                    )
+
             logger.success(f"Forwarded from {getattr(chat, 'title', 'Unknown')} to {len(sent_results)} destinations")
     except Exception as e:
         logger.error(f"Processing error: {e}")
@@ -147,10 +207,10 @@ async def process_message(client, db, aggregators, chat_id, messages, is_album=F
 async def catch_up(client: TelegramClient, db: Database, channels: list, duration: timedelta | None = None):
     aggregators = get_aggregators()
     if not aggregators: return
-    
+
     for chat_id in channels:
         last_id = await db.get_last_message_id(chat_id)
-        
+
         params = {"reverse": True}
         if duration:
             params["offset_date"] = datetime.now() - duration
@@ -158,31 +218,58 @@ async def catch_up(client: TelegramClient, db: Database, channels: list, duratio
             params["limit"] = 10
         else:
             params["min_id"] = last_id
-        
+
         current_album = []
         current_gid = None
-        
+
         async for msg in client.iter_messages(chat_id, **params):
             if msg.grouped_id:
                 if current_gid and msg.grouped_id == current_gid:
                     current_album.append(msg)
                 else:
                     if current_album:
-                        await process_message(client, db, aggregators, chat_id, current_album, is_album=True)
+                        await process_message(
+                            client,
+                            db,
+                            aggregators,
+                            chat_id,
+                            current_album,
+                            is_album=True
+                        )
                         await asyncio.sleep(2)
                     current_album = [msg]
                     current_gid = msg.grouped_id
             else:
                 if current_album:
-                    await process_message(client, db, aggregators, chat_id, current_album, is_album=True)
+                    await process_message(
+                        client,
+                        db,
+                        aggregators,
+                        chat_id,
+                        current_album,
+                        is_album=True
+                    )
                     await asyncio.sleep(2)
                     current_album = []
                     current_gid = None
-                await process_message(client, db, aggregators, chat_id, [msg])
+                await process_message(
+                    client,
+                    db,
+                    aggregators,
+                    chat_id,
+                    [msg]
+                )
                 await asyncio.sleep(2)
-        
+
         if current_album:
-            await process_message(client, db, aggregators, chat_id, current_album, is_album=True)
+            await process_message(
+                client,
+                db,
+                aggregators,
+                chat_id,
+                current_album,
+                is_album=True
+            )
             await asyncio.sleep(2)
 
 async def register_handlers(client: TelegramClient, db: Database, active_ids: list, inactive_names: list):
@@ -210,7 +297,15 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
 
     @client.on(events.Album(chats=active_ids))
     async def album_handler(event):
-        await process_message(client, db, aggregators, event.chat_id, event.messages, is_album=True, chat=await event.get_chat())
+        await process_message(
+            client,
+            db,
+            aggregators,
+            event.chat_id,
+            event.messages,
+            is_album=True,
+            chat=await event.get_chat()
+        )
 
     @client.on(events.NewMessage(chats=active_ids, func=lambda e: e.grouped_id is None))
     async def message_handler(event):
@@ -226,7 +321,7 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
             has_media = event.media and not isinstance(event.media, MessageMediaWebPage)
             limit = CAPTION_LIMIT if has_media else TEXT_LIMIT
             safe_text = text if len(text) <= limit else text[:limit-3] + "..."
-            
+
             for agg in aggregators:
                 agg_id = await db.get_mapping(event.chat_id, event.id, agg)
                 if not agg_id: continue
@@ -235,7 +330,7 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
                         await client.edit_message(agg, agg_id, text=safe_text, link_preview=False)
                         await asyncio.sleep(0.5)
                 except MessageNotModifiedError:
-                    pass 
+                    pass
                 except MessageIdInvalidError:
                     logger.info(f"Message {agg_id} in {agg} no longer exists, deleting mapping.")
                     await db.delete_mapping(event.chat_id, event.id, agg)
@@ -249,7 +344,7 @@ async def register_handlers(client: TelegramClient, db: Database, active_ids: li
             for agg in aggregators:
                 agg_id = await db.get_mapping(event.chat_id, msg_id, agg)
                 if agg_id:
-                    try: 
+                    try:
                         async with send_lock:
                             await client.delete_messages(agg, agg_id)
                             await asyncio.sleep(0.5)

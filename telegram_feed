@@ -1,0 +1,24 @@
+  /home/cyber-green/coding/cyber-green/telegram_feed:
+    0 drwxr-xr-x 1 cyber-green cyber-green    468 Apr  2 09:00 .
+    0 drwxr-xr-x 1 cyber-green cyber-green    724 Apr  2 14:54 ..
+   28 -rw-r--r-- 1 cyber-green cyber-green  28672 Mar 31 09:01 bot_session.session
+    4 -rw-r--r-- 1 cyber-green cyber-green   1400 Mar 31 08:19 config.toml
+    4 -rw-r--r-- 1 cyber-green cyber-green     54 Mar 27 00:27 config.toml.example
+    0 drwxr-xr-x 1 cyber-green cyber-green     62 Apr  2 09:00 db
+    4 -rw-r--r-- 1 cyber-green cyber-green   1026 Mar 25 19:50 diagnose.py
+    4 -rw-r--r-- 1 cyber-green cyber-green    272 Mar 31 11:18 .env
+    4 -rw-r--r-- 1 cyber-green cyber-green    200 Mar 31 09:02 .env.example
+    0 drwxr-xr-x 1 cyber-green cyber-green    166 Apr  1 18:42 .git
+    4 -rw-r--r-- 1 cyber-green cyber-green    152 Mar 31 08:02 .gitignore
+    0 drwxr-xr-x 1 cyber-green cyber-green     42 Apr  1 18:34 handlers
+    8 -rw-r--r-- 1 cyber-green cyber-green   6158 Apr  1 18:34 main.py
+    0 drwxr-xr-x 1 cyber-green cyber-green     40 Mar 31 07:57 __pycache__
+    4 -rw-r--r-- 1 cyber-green cyber-green    309 Mar 31 08:02 pyproject.toml
+    4 -rw-r--r-- 1 cyber-green cyber-green      5 Mar 23 23:09 .python-version
+    4 -rw-r--r-- 1 cyber-green cyber-green   1067 Apr  1 18:34 README.md
+    4 -rw-r--r-- 1 cyber-green cyber-green     54 Mar 23 23:35 requirements.txt
+  128 -rw-r--r-- 1 cyber-green cyber-green 131072 Apr  2 09:00 session.session
+   24 -rw-r--r-- 1 cyber-green cyber-green  21032 Apr  2 09:00 session.session-journal
+    0 drwxr-xr-x 1 cyber-green cyber-green     64 Apr  1 18:34 utils
+   12 -rw-r--r-- 1 cyber-green cyber-green  11864 Mar 31 08:02 uv.lock
+    0 drwxr-xr-x 1 cyber-green cyber-green     96 Mar 23 23:20 .venv
