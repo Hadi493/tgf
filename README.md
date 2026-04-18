@@ -1,4 +1,4 @@
-# tgf — My Telegram Feed
+# TgF — My Telegram Feed
 
 I built `tgf` because I was tired of jumping between dozens of Telegram channels to stay updated. This is a simple tool that watches the channels i care about and forwards everything into one single "feed" channel/bot for me.
 
