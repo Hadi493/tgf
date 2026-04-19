@@ -37,18 +37,12 @@ def load_config() -> dict:
             "source": {"folder": []},
             "source_channels": {"channels": []}
         }
-<<<<<<< HEAD
-    with open(CONFIG_FILE, "rb") as f:
-        return tomllib.load(f)
-=======
-
     try:
         with open(CONFIG_FILE, "rb") as f:
             return tomllib.load(f)
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
         return {"source": {"folder": []}, "source_channels": {"channels": []}}
->>>>>>> dev
 
 def save_config(config: dict):
     """Saves configuration to the TOML file."""
@@ -192,12 +186,8 @@ async def main():
     inactive_names = []
 
     folder_names = config.get("source", {}).get("folder", [])
-<<<<<<< HEAD
-    if isinstance(folder_names, str): folder_names = [folder_names]
-=======
     if isinstance(folder_names, str):
         folder_names = [folder_names]
->>>>>>> dev
 
     for name in folder_names:
         folder_ids, folder_inactive = await get_channels_from_folder(client, name)
@@ -240,15 +230,7 @@ async def main():
             if last_id == 0:
                 async for msg in client.iter_messages(chat_id, limit=1):
                     await db.save_mapping(chat_id, msg.id, 0, agg_id)
-<<<<<<< HEAD
-
-    logger.success(f"Running! Monitoring {len(unique_active)} channels")
-
-=======
-
     logger.success(f"Running! Monitoring {len(unique_active)} channels.")
-
->>>>>>> dev
     try:
         await client.run_until_disconnected()
     finally:
